@@ -328,7 +328,7 @@ def BuildEpgLine(Channel,SID,timenow,oddeven):
 def PrintEPG():
     gmt = time.gmtime()
     timenow = calendar.timegm(gmt)
-    #timenow = cint32(mktime(gmt))
+    timenow = timenow + 0
     sid = DoAuth(pin)
     CList=GetChannelList(sid)
     PrintHTMLHead()
