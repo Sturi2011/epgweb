@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #'''
+# Custom Web EPG Server for Nextpvr
+#
+# Copyright (c) 2023 Andreas Fohl <andreas@fohl.net>
+# Under GPL V3 License (http://www.opensource.org/licenses/mit-license.php)
+#
+# https://github.com/sturi2011/nextpvrepg
 #'''
 import cgi
 import urllib.request
