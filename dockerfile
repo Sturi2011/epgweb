@@ -12,7 +12,8 @@ RUN a2enmod cgi
 RUN echo "\n<Directory /var/www/>\n        Options +ExecCGI\n        AddHandler cgi-script .py\n</Directory>\n" >> /etc/apache2/apache2.conf
 RUN sed -i 's/\/usr\/lib/\/var\/www/g' /etc/apache2/conf-available/serve-cgi-bin.conf
 RUN sed -i 's/index.cgi/\/cgi-bin\/epg.py/g' /etc/apache2/mods-enabled/dir.conf 
-RUN echo Europe/Berlin > /etc/timezone && dpkg-reconfigure tzdata
+ENV TZ=Europe/Berlin
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY epg.py /var/www/cgi-bin/epg.py
 COPY run.sh /run.sh
 RUN rm /var/www/html/index.*
