@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #'''
-# Custom Web EPG Server for Nextpvr
+# Custom Web EPG Server for Nextpvr and TVHeadend
 #
 # Copyright (c) 2023 Andreas Fohl <andreas@fohl.net>
-# Under GPL V3 License (http://www.opensource.org/licenses/mit-license.php)
+# Under GPL V3 License
 #
 # https://github.com/sturi2011/nextpvrepg
 #'''
 import cgi
 import urllib.request
+import urllib.parse
 import hashlib
 import time
 import calendar
@@ -21,6 +22,8 @@ import configparser
 from array import *
 import cgi
 import datetime
+import json
+#ReadConfig
 config = configparser.ConfigParser()
 config.sections()
 config.read('epg.conf')
@@ -28,13 +31,24 @@ sid=""
 pin=config['EPG']['pin']
 server=config['EPG']['server']
 scale=int(config['EPG']['scale'])
+offset=int(config['EPG']['offset'])*-1
+shownowline=(config['EPG']['shownowline'])
+showtimeline=(config['EPG']['showtimeline'])
+servertype=(config['EPG']['servertype'])
+enabledebug=(config['EPG']['enabledebug'])
+if servertype == 'NextPvr':     
+    stype=0
+elif servertype == 'TVHeadend':
+    stype=1 
+elif servertype == 'MythTV':
+    stype=2 
+else: 
+    stype=0
 
-
-
-def PrintCSSHead():
-    print('''Content-Type: text/css; charset=utf-8\n''')
-def PrintHTMLHead():
-    print('''Content-Type: text/html; charset=utf-8\n''')
+  
+#Common Functions
+def PrintHead(lang):
+    print('''Content-Type: text/%s; charset=utf-8\n'''% (lang))
 def PrintHeader():
     print('''<html>
  <head>
@@ -95,21 +109,14 @@ def PrintHeader():
 <div class="closebutton" id="closebutton"></div>
 </div>''')
 def PrintFooter():
-    print('<!--')
-    print(pin)
-    print(server)
-    print(scale)
-    print('-->')
-    print('''</body>
-</html>''')
+    print('''</body></html>''')
 def PrintEPGCSS():
-    PrintCSSHead()
+    PrintHead('css')
     print('''body {
   background-color: #000000;
   font-family: Arial;
   margin: 0px;
   }
-
   
   a{
   text-decoration: none;
@@ -140,13 +147,40 @@ def PrintEPGCSS():
   background-color: #333333;
   z-index: 100;
   }
-  
-  .timeline {
-  background-color: #333333;
+
+  .nowline {
+  width:3px;
+  background-Color:red;
+  top:0px;
+  z-index:75;
+  position:absolute;
+  opacity: 0.3;
   }
   
-  .epgtext {
-  color: #ffffff;
+  .timeline10p {
+  background-color: #333333;
+  height:10px;
+  position: relative;
+  }
+
+  .timeline20p {
+  background-color: #333333;
+  height:20px;
+  position: relative;
+  }
+  
+  .timelinemarker10p {
+  width:1px; 
+  height:10px;
+  position: relative; 
+  background-Color:#ffffff;
+  }
+
+  .timelinemarker20p {
+  width:1px; 
+  height:20px;
+  position: relative; 
+  background-Color:#ffffff;
   }
   
   .epgtxt {
@@ -241,7 +275,7 @@ def PrintEPGCSS():
  
   ''')
 def PrintDetailCSS():
-    PrintCSSHead()
+    PrintHead('css')
     print('''  .EPGDetailTitle{
   font-family: "Helvetica Neue", "Helvetica", "Open Sans", "Arial", sans-serif;
   font-size:24px;
@@ -258,12 +292,58 @@ def PrintDetailCSS():
   }
   '''
   )
-def DoAuth(PIN):
-    #Create MD5 Hasch of Pin
-    pinmd5 = hashlib.md5("0000".encode('utf-8')).hexdigest()
+def PrintNowLine(CList):
+    offsetpx=(((offset/-1)/scale)+55)
+    heightpx=(40*len(CList)+20)
+    return('<div class="nowline" style="height:%spx;left:%spx;"></div>'% (heightpx,offsetpx))
+def PrintTimeLine(dtwd,servertype):
+    SecondsToFullHour=((60-int(dtwd.strftime("%M")))*60)+60-(int(dtwd.strftime("%S")))
+    TimeLineString = "<thead height='20px' style='position:sticky; top:0px; z-index:50;'><tr><th class='chanellogo'>"+servertype+"</th><td style='background-Color:#333333;'><div style='height:20px;display: inline-flex;'>"
+    if SecondsToFullHour > 2700:
+        TimeLineString += ("<div style='width:%s;' class=timeline20p></div>"%(((SecondsToFullHour-2700)//scale)-3))
+        TimeLineString += ("<div class='timelinemarker10p'></div>")
+        TimeLineString += ("<div style='width:%spx;' class=timeline10p><font class=timecode>&nbsp;15</font></div>"% (((3600/4)//scale)-1))  
+        TimeLineString += ("<div class='timelinemarker10p'></div>")
+        TimeLineString += ("<div style='width:%spx;' class=timeline10p><font class=timecode>&nbsp;30</font></div>"% (((3600/4)//scale)-1))         
+        TimeLineString += ("<div class='timelinemarker10p'></div>")
+        TimeLineString += ("<div style='width:%spx;' class=timeline10p><font class=timecode>&nbsp;45</font></div>"% (((3600/4)//scale)-1)) 
+    elif SecondsToFullHour > 1800:
+        TimeLineString += ("<div style='width:%s;' class=timeline20p></div>"%(((SecondsToFullHour-1800)//scale)-3))
+        TimeLineString += ("<div class='timelinemarker10p'></div>")
+        TimeLineString += ("<div style='width:%spx;' class=timeline10p><font class=timecode>&nbsp;30</font></div>"% (((3600/4)//scale)-1))  
+        TimeLineString += ("<div class='timelinemarker10p'></div>")
+        TimeLineString += ("<div style='width:%spx;' class=timeline10p><font class=timecode>&nbsp;45</font></div>"% (((3600/4)//scale)-1)) 
+    elif SecondsToFullHour > 900:
+        TimeLineString += ("<div style='width:%s;' class=timeline20p></div>"%(((SecondsToFullHour-900)//scale)-3))
+        TimeLineString += ("<div class='timelinemarker10p'></div>")
+        TimeLineString += ("<div style='width:%spx;' class=timeline10p><font class=timecode>&nbsp;45</font></div>"% (((3600/4)//scale)-1))  
+    elif SecondsToFullHour >4*scale:
+        TimeLineString += ("<div style='width:%s;' class=timeline20p></div>"%(((SecondsToFullHour)//scale)-3))
+    for x in range(1, 24):
+        TimeLinePos=int(dtwd.strftime("%H")) + x
+        if TimeLinePos > 23:
+            TimeLinePos=TimeLinePos -24
+        TimeLineString += ("<div class='timelinemarker20p'></div>")
+        TimeLineString += ("<div style='width:%spx;' class='timeline20p'><font class=timecodehour>&nbsp;%s</font></div>"%((((3600/4)//scale)-1),TimeLinePos))
+        TimeLineString += ("<div timelinemarker10p></div>")
+        TimeLineString += ("<div style='width:%spx;' class='timeline10p'><font class=timecode>&nbsp;15</font></div>"% (((3600/4)//scale)-1))
+        TimeLineString += ("<div timelinemarker10p></div>")
+        TimeLineString += ("<div style='width:%spx;' class='timeline10p'><font class=timecode>&nbsp;30</font></div>"% (((3600/4)//scale)-1))
+        TimeLineString += ("<div timelinemarker10p></div>")
+        TimeLineString += ("<div style='width:%spx;' class='timeline10p'><font class=timecode>&nbsp;45</font></div>"% (((3600/4)//scale)-1))
+    TimeLineString += ("</div></td></tr></thead>")
+    return TimeLineString
+#NextPVR Functions
+def DoAuthNPVR(server,pin):
+    #Create Pin`s MD5 Hasch 
+    pinmd5 = hashlib.md5(pin.encode('utf-8')).hexdigest()
     #Get Salt and SID from Nextpvr API
-    webUrl  = urllib.request.urlopen('%s/service?method=session.initiate&ver=1.0&device=xbmc'%(server))
-    root = etree.fromstring(webUrl.read())
+    try:
+        webUrl  = urllib.request.urlopen('%s/service?method=session.initiate&ver=1.0&device=xbmc'%(server))    
+        response = webUrl.read()
+    except Exception as e:
+        return '1'
+    root = etree.fromstring(response)
     sid = root.find('sid').text
     salt = root.find('salt').text
     #Build Digest for login
@@ -274,9 +354,12 @@ def DoAuth(PIN):
     accessmd5 = hashlib.md5(combinedMD5.encode('utf-8')).hexdigest()
     #Authenticate Session
     webUrl  = urllib.request.urlopen('%s/service?method=session.login&sid=%s&md5=%s'% (server,sid,accessmd5))
-    Login= (webUrl.read()) #Have to check if rsp=ok mayby later
-    return sid
-def GetChannelList(SID):
+    Login= (webUrl.read()) 
+    if('Login Failed' in str(Login)):
+        return '0'
+    else:
+        return sid
+def GetChannelListNPVR(server,SID):
     webUrl  = urllib.request.urlopen('%s/service?method=channel.list&extras=true&sid=%s'% (server,SID))
     root = etree.fromstring(webUrl.read())
     channell = root.find('channels')
@@ -287,7 +370,7 @@ def GetChannelList(SID):
         ChannelNumber = channel.find('number').text
         CList.append([ChannelName,ChannelID,ChannelNumber])
     return CList
-def BuildEpgLine(Channel,SID,timenow,oddeven):
+def BuildEpgLineNPVR(server,Channel,SID,timenow,oddeven):
     webUrl  = urllib.request.urlopen('%s/service?method=channel.listings&channel_id=%s&genre=all&sid=%s&start=%s&end=%s'% (server,Channel,SID,timenow,timenow+86400))
     retval = "<td valign=top style='height:39px; width:1600px; white-Space:nowrap'><div class='epgrow'>"
     data = webUrl.read()
@@ -300,7 +383,7 @@ def BuildEpgLine(Channel,SID,timenow,oddeven):
             timeend = (int(l.find('end').text[:-3]))-timenow
             dt = datetime.datetime.fromtimestamp(timestartabs)
             duration = (timeend-timestart)//60
-            if timestart < 1:
+            if timestart + offset < 1:
                 timestart=0
                 if oddeven == "even":
                     oddevenresult = "evennow"
@@ -325,37 +408,52 @@ def BuildEpgLine(Channel,SID,timenow,oddeven):
             retval += ('</a></span><br><span class=epgtxt>%s ab %s:%s (%s Min)</span></div>'% (record,dt.hour, minutes,str(duration)))
     retval += "</div></td>"
     return retval
-def PrintEPG():
-    gmt = time.gmtime()
-    timenow = calendar.timegm(gmt)
-    timenow = timenow + 0
-    sid = DoAuth(pin)
-    CList=GetChannelList(sid)
-    PrintHTMLHead()
-    PrintHeader()
-    print('<section class="gesamt">')
-    print('<table>')
-    print('<thead height="20px" style="position:sticky; top:0px; z-index:100;"><tr><th class="chanellogo"></th><td style="background-Color:#333333;">')
-    PrintTimeLine()
-    print('</td></tr></thead>')
-    for i in range(1,len(CList)):
-        oddeven="odd"
-        if i%2 == 0:
-            oddeven="even"
-        print('<tr><th class="chanellogo">')
-        print('<a href="%s/live?channel=%s&sid=%s"><img src="%s/service?method=channel.icon&channel_id=%s&sid=%s" style="height:30;width=30;" alt="%s">'% (server,CList[i][2],sid,server,CList[i][1],sid,CList[i][0]))
-        print('</th>')
-        print(BuildEpgLine(CList[i][1],sid,timenow,oddeven))
-        print('</tr>')
-    print('</table></section>') 
-    PrintFooter()    
-def PrintEPGDetail():
+def PrintEPGNPVR(server,pin):
+    dtwd = datetime.datetime.now() + datetime.timedelta(seconds=offset)
+    timenow=int(time.mktime(dtwd.timetuple()))
+    PrintHead('html')
+    sid = DoAuthNPVR(server,pin)
+    if(sid == '0'):
+        print('<html><head><style>body{font-family: Arial, Helvetica, sans-serif;}</style></head><body><font color="#ff0000">login failed - wrong pin?</font><br>')
+        if(enabledebug=='1'):
+            print ('<a href=/cgi-bin/epg.py?page=debug>get debug infos</a>')
+        else:
+            print ('Enbale debuginfo with environmelnt variable enabledebug=1')
+            print('</body></html>')
+    elif(sid == '1'):
+        print('<html><head><style>body{font-family: Arial, Helvetica, sans-serif;}</style></head><body><font color="#ff0000">connection failed - wrong serveraddress?</font><br>')
+        if(enabledebug=='1'):
+            print ('<a href=/cgi-bin/epg.py?page=debug>get debug infos</a>')
+        else:
+            print ('Enbale debuginfo with environmelnt variable enabledebug=1')
+            print('</body></html>')
+    else:    
+        CList=GetChannelListNPVR(server,sid)
+        PrintHeader()
+        print('<section class="gesamt">')
+        print('<table>')
+        if(showtimeline=='1'):
+            print(PrintTimeLine(dtwd,'NPVR'))
+        for i in range(1,len(CList)):
+            oddeven="odd"
+            if i%2 == 0:
+                oddeven="even"
+            print('<tr><th class="chanellogo">')
+            print('<a href="%s/live?channel=%s&sid=%s"><img src="%s/service?method=channel.icon&channel_id=%s&sid=%s" style="height:30;width=30;" alt="%s">'% (server,CList[i][2],sid,server,CList[i][1],sid,CList[i][0]))
+            print('</th>')
+            print(BuildEpgLineNPVR(server,CList[i][1],sid,timenow,oddeven))
+            print('</tr>')
+        print('</table></section>')
+        if(shownowline=='1'):
+            print(PrintNowLine(CList))
+        PrintFooter()  
+def PrintEPGDetailNPVR(server,pin):
     if "eventId" in fs:
         eventid = fs["eventId"].value
     else:
         eventid = "0"
-    sid = DoAuth(pin)
-    PrintHTMLHead()
+    sid = DoAuthNPVR(server,pin)
+    PrintHead('html')
     webUrl  = urllib.request.urlopen('%s/service?method=channel.listing&event_id=%s&sid=%s'% (server,eventid,sid))
     root = etree.fromstring(webUrl.read())
     event = root.find('event')
@@ -366,92 +464,389 @@ def PrintEPGDetail():
     else:
         record=""
     print("<html><head><link rel='stylesheet' href='/cgi-bin/epg.py?page=detailcss'></head><body><br><span class='EPGDetailTitle'>%s</span><br><br><span class='EPGDetailContent'>%s</span>%s</body></html>"%(Title,Detail,record))
-def PrintRecordEvent():
+def PrintRecordEventNPVR(server,pin):
     if "eventId" in fs:
         eventid = fs["eventId"].value
     else:
         eventid = "0"
-    sid = DoAuth(pin)
-    PrintHTMLHead()
+    sid = DoAuthNPVR(server,pin)
+    PrintHead('html')
     webUrl  = urllib.request.urlopen('%s/service?method=recording.save&event_id=%s&sid=%s'% (server,eventid,sid))
     result = webUrl.read()
     if "ok" in str(result):
         print("<html><head><link rel='stylesheet' href='/cgi-bin/epg.py?page=detailcss'></head><body><br><span class='EPGDetailTitle'>Aufnahme geplant</span></body></html>")
     else:
         print("<html><head><link rel='stylesheet' href='/cgi-bin/epg.py?page=detailcss'></head><body><br><span class='EPGDetailTitle'>Fehlgeschlagen</span></body></html>")
-def PrintRecordDelete():
+def PrintRecordDeleteNPVR(server,pin):
     if "eventId" in fs:
         eventid = fs["eventId"].value
     else:
         eventid = "0"
-    sid = DoAuth(pin)
-    PrintHTMLHead()
+    sid = DoAuthNPVR(server,pin)
+    PrintHead('html')
     webUrl  = urllib.request.urlopen('%s/service?method=recording.delete&recording_id=%s&sid=%s'% (server,eventid,sid))
     result = webUrl.read()
     if "ok" in str(result):
         print("<html><head><link rel='stylesheet' href='/cgi-bin/epg.py?page=detailcss'></head><body><br><span class='EPGDetailTitle'>Aufnahme gelöscht</span></body></html>")
     else:
         print("<html><head><link rel='stylesheet' href='/cgi-bin/epg.py?page=detailcss'></head><body><br><span class='EPGDetailTitle'>Fehlgeschlagen</span></body></html>")
-def PrintTimeLine():
-    gmt = time.localtime()
-    SecondsToFullHour=((60-gmt.tm_min)*60)+(60-gmt.tm_sec)
-    TimeLineString = "<div style='height:20px;display: inline-flex;'>"
-    if SecondsToFullHour > 2700:
-        TimeLineString += ("<div style='width:%s; height:20px;position: relative;' class=timeline></div>"%(((SecondsToFullHour-2700)//scale)-3))
-        TimeLineString += ("<div style='width:1px; height:10px;position: relative; background-Color:#ffffff;'></div>")
-        TimeLineString += ("<div style='width:%spx; height:10px;position: relative;' class=timeline><font class=timecode>&nbsp;15</font></div>"% (((3600/4)//scale)-1))  
-        TimeLineString += ("<div style='width:1px; height:10px;position: relative; background-Color:#ffffff;'></div>")
-        TimeLineString += ("<div style='width:%spx; height:10px;position: relative;' class=timeline><font class=timecode>&nbsp;30</font></div>"% (((3600/4)//scale)-1))         
-        TimeLineString += ("<div style='width:1px; height:10px;position: relative; background-Color:#ffffff;'></div>")
-        TimeLineString += ("<div style='width:%spx; height:10px;position: relative;' class=timeline><font class=timecode>&nbsp;45</font></div>"% (((3600/4)//scale)-1)) 
-    elif SecondsToFullHour > 1800:
-        TimeLineString += ("<div style='width:%s; height:20px;position: relative;' class=timeline></div>"%(((SecondsToFullHour-1800)//scale)-3))
-        TimeLineString += ("<div style='width:1px; height:10px;position: relative; background-Color:#ffffff;'></div>")
-        TimeLineString += ("<div style='width:%spx; height:10px;position: relative;' class=timeline><font class=timecode>&nbsp;30</font></div>"% (((3600/4)//scale)-1))  
-        TimeLineString += ("<div style='width:1px; height:10px;position: relative; background-Color:#ffffff;'></div>")
-        TimeLineString += ("<div style='width:%spx; height:10px;position: relative;' class=timeline><font class=timecode>&nbsp;45</font></div>"% (((3600/4)//scale)-1)) 
-    elif SecondsToFullHour > 900:
-        TimeLineString += ("<div style='width:%s; height:20px;position: relative;' class=timeline></div>"%(((SecondsToFullHour-900)//scale)-3))
-        TimeLineString += ("<div style='width:1px; height:10px;position: relative; background-Color:#ffffff;'></div>")
-        TimeLineString += ("<div style='width:%spx; height:10px;position: relative;' class=timeline><font class=timecode>&nbsp;45</font></div>"% (((3600/4)//scale)-1))  
-    elif SecondsToFullHour >4*scale:
-        TimeLineString += ("<div style='width:%s; height:20px;position: relative;' class=timeline></div>"%(((SecondsToFullHour)//scale)-3))
-    for x in range(1, 24):
-        TimeLinePos=gmt.tm_hour + x
-        if TimeLinePos > 23:
-            TimeLinePos=TimeLinePos -24
-        TimeLineString += ("<div style='width:1px; height:20px;position: relative; background-Color:#ffffff;'></div>")
-        TimeLineString += ("<div style='width:%spx; height:20px;position: relative;' class=timeline><font class=timecodehour>&nbsp;%s</font></div>"%((((3600/4)//scale)-1),TimeLinePos))
-        TimeLineString += ("<div style='width:1px; height:10px;position: relative; background-Color:#ffffff;'></div>")
-        TimeLineString += ("<div style='width:%spx; height:10px;position: relative;' class=timeline><font class=timecode>&nbsp;15</font></div>"% (((3600/4)//scale)-1))
-        TimeLineString += ("<div style='width:1px; height:10px;position: relative; background-Color:#ffffff;'></div>")
-        TimeLineString += ("<div style='width:%spx; height:10px;position: relative;' class=timeline><font class=timecode>&nbsp;30</font></div>"% (((3600/4)//scale)-1))
-        TimeLineString += ("<div style='width:1px; height:10px;position: relative; background-Color:#ffffff;'></div>")
-        TimeLineString += ("<div style='width:%spx; height:10px;position: relative;' class=timeline><font class=timecode>&nbsp;45</font></div>"% (((3600/4)//scale)-1))
-    TimeLineString += ("</div>")
-    print(TimeLineString)
+#TVHEADEND Functions
+def GetChannelListTVH(server):
+    webUrl  = urllib.request.urlopen('%s/api/channel/grid?sort=number'% (server))
+    channell = json.loads(webUrl.read())
+    CList = [[]]
+    for channel in channell['entries']:
+        ChannelName = channel['name']
+        ChannelID = channel['uuid']
+        ChannelNumber = channel['number']
+        ChannelIcon = channel['icon_public_url']
+        CList.append([ChannelName,ChannelID,ChannelNumber,ChannelIcon])
+    return CList
+def BuildEpgLineTVH(server,channeluuid,timenow,oddeven):
+    webUrl  = urllib.request.urlopen('%s/api/epg/events/grid?channel=%s&limit=120'% (server,channeluuid))
+    retval = "<td valign=top style='height:39px; width:1600px; white-Space:nowrap'><div class='epgrow'>"
+    epglist = json.loads(webUrl.read())
+    for epgentry in epglist['entries']:
+        timestartabs = int(epgentry['start'])
+        timestart = timestartabs-timenow
+        timeend = int(epgentry['stop'])-timenow
+        dt = datetime.datetime.fromtimestamp(timestartabs)
+        duration = (timeend-timestart)//60
+        if timestart + offset < 1:
+            timestart=0
+            if oddeven == "even":
+                oddevenresult = "evennow"
+            if oddeven == "odd":
+                oddevenresult = "oddnow"
+        else:
+            oddevenresult=oddeven
+        retval += ('<div class="epgcell %s" style="width:'%(oddevenresult))
+        retval += str(((timeend//scale)-(timestart//scale))-3)
+        if 'dvrUuid' in epgentry:
+            retval += (';"><span class=epgtxt><a href="javascript:showinfodel(%s,\'%s\')" width="320" height="320">'%(epgentry['eventId'],epgentry['dvrUuid']))
+        else:
+            retval += (';"><span class=epgtxt><a href="javascript:showinfo(%s)" width="320" height="320">'%(epgentry['eventId']))
+        retval += epgentry['title']
+        if 'dvrUuid' in epgentry:
+            record="<font style='color:#ff0000;'>[REC]</font>"
+        else:
+            record=""
+        minutes = dt.minute
+        if minutes < 10:
+            minutes = ("0%s"%(minutes))
+        retval += ('</a></span><br><span class=epgtxt>%s ab %s:%s (%s Min)</span></div>'% (record,dt.hour, minutes,str(duration)))
+    retval += "</div></td>"
+    return retval
+def PrintEPGTVH(server):
+    PrintHead('html')
+    try:
+        webUrl  = urllib.request.urlopen('%s/api/service/mapper/status'% (server))
+        status = json.loads(webUrl.read())
+    except Exception:
+        print('<html><head><style>body{font-family: Arial, Helvetica, sans-serif;}</style></head><body><font color="#ff0000">connection failed - wrong serveraddress?</font><br>')
+        if(enabledebug=='1'):
+            print ('<a href=/cgi-bin/epg.py?page=debug>get debug infos</a>')
+        else:
+            print ('Enbale debuginfo with environmelnt variable enabledebug=1')
+        print('</body></html>')
+        end()
+    dtwd = datetime.datetime.now() + datetime.timedelta(seconds=offset)
+    timenow=int(time.mktime(dtwd.timetuple()))
+    CList=GetChannelListTVH(server)
+    PrintHeader()
+    print('<section class="gesamt">')
+    print('<table>')
+    if(showtimeline=='1'):
+        print(PrintTimeLine(dtwd,'TVH'))
+    for i in range(1,len(CList)):
+        oddeven="odd"
+        if i%2 == 0:
+            oddeven="even"
+        print('<tr><th class="chanellogo">')
+        print('<img src="%s/%s" style="height:30;width=30;" alt="%s">'% (server,CList[i][3],CList[i][1]))
+        print('</th>')
+        print(BuildEpgLineTVH(server,CList[i][1],timenow,oddeven))
+        print('</tr>')
+    print('</table></section>')
+    if(shownowline=='1'):
+        print(PrintNowLine(CList))
+    PrintFooter()
+def PrintEPGDetailTVH(server):
+    if "eventId" in fs:
+        eventid = fs["eventId"].value
+    else:
+        eventid = "0"
+    PrintHead('html')
+    webUrl  = urllib.request.urlopen('%s//api/epg/events/load?eventId=%s'% (server,eventid))
+    epgdetail = json.loads(webUrl.read())
+    for epgentry in epgdetail['entries']:
+        Title = epgentry['title']
+        Detail = epgentry['description']
+    if 'dvrUuid' in epgentry:
+        record="<span class='record'>[REC]</span>"
+    else:
+        record=""
+    print("<html><head><link rel='stylesheet' href='/cgi-bin/epg.py?page=detailcss'></head><body><br><span class='EPGDetailTitle'>%s</span><br><br><span class='EPGDetailContent'>%s</span>%s</body></html>"%(Title,Detail,record))
+def PrintRecordEventTVH(server):
+    if "eventId" in fs:
+        eventid = fs["eventId"].value
+    else:
+        eventid = "0"
+    PrintHead('html')
+    #get recordprofile
+    webUrl = urllib.request.urlopen('%s/api/dvr/config/grid'%(server))
+    configdetail = json.loads(webUrl.read())    
+    for configentry in configdetail['entries']:
+        uuid = configentry['uuid']
+        isactive = configentry['enabled']
+        if(isactive):
+            break
+    webUrl1 = urllib.request.urlopen('%s/api/dvr/entry/create_by_event?event_id=%s&config_uuid=%s'% (server,eventid,uuid))
+    recorddetail = json.loads(webUrl1.read())  
+    if 'uuid' in recorddetail:
+        print("<html><head><link rel='stylesheet' href='/cgi-bin/epg.py?page=detailcss'></head><body><br><span class='EPGDetailTitle'>Aufnahme geplant</span></body></html>")
+    else:
+        print("<html><head><link rel='stylesheet' href='/cgi-bin/epg.py?page=detailcss'></head><body><br><span class='EPGDetailTitle'>Fehlgeschlagen</span></body></html>")
+def PrintRecordDeleteTVH(server):
+    if "eventId" in fs:
+        eventid = fs["eventId"].value
+    else:
+        eventid = "0"
+    PrintHead('html')
+    webUrl = urllib.request.urlopen('%s/api/dvr/entry/cancel?uuid=%s'% (server,eventid))
+    statuscode = webUrl.getcode()
+    if (statuscode == 200):
+        print("<html><head><link rel='stylesheet' href='/cgi-bin/epg.py?page=detailcss'></head><body><br><span class='EPGDetailTitle'>Aufnahme gelöscht</span></body></html>")
+    else:
+        print("<html><head><link rel='stylesheet' href='/cgi-bin/epg.py?page=detailcss'></head><body><br><span class='EPGDetailTitle'>Fehlgeschlagen</span></body></html>")
+#MythTV Functions
+def GetChannelListMythTV(server):
+    webUrl  = urllib.request.urlopen('%s/Channel/GetChannelInfoList?SourceID=0&StartIndex=1&OnlyVisible=false&Details=true'% (server))
+    root = etree.fromstring(webUrl.read())
+    channell = root.find('ChannelInfos')
+    CList = [[]]
+    for channel in list(channell):
+        ChannelName = channel.find('ChannelName').text
+        ChannelID = channel.find('ChanId').text
+        ChannelNumber = channel.find('ChanNum').text
+        ChannelIcon = channel.find('IconURL').text
+        CList.append([ChannelName,ChannelID,ChannelNumber,ChannelIcon])
+    return CList
+def BuildEpgLineMythTV(server,Channel,timenow,oddeven):
+    #webUrl  = urllib.request.urlopen('%s/service?method=channel.listings&channel_id=%s&genre=all&sid=%s&start=%s&end=%s'% (server,Channel,SID,timenow,timenow+86400))
+    webUrl  = urllib.request.urlopen('%s/Guide/GetProgramList?StartTime=2023-06-20T19:00:00Z&EndTime=2023-06-20T23:59:00Z&ChanID=%s&Count=20&details=false'% (server,Channel))
+    retval = "<td valign=top style='height:39px; width:1600px; white-Space:nowrap'><div class='epgrow'>"
+    data = webUrl.read()
+    root = etree.fromstring(data, parser=parser)
+    listing = root.find('Programs')
+    for l in list(listing):
+        if l.tag == "Program":
+            #<StartTime>2023-06-20T20:05:00Z</StartTime>
+            #<EndTime>2023-06-20T21:03:00Z</EndTime>
+            timestartabs = datetime.datetime.strptime(l.find('StartTime').text, '%Y-%m-%dT%H:%M:%SZ')
+            #timestartabs = datetime.datetime.strptime('2023-06-20 20:05:00', '%Y-%m-%d %H:%M:%S')
+            #timestartabs = (l.find('StartTime').text)
+            #timestartabs = int(l.find('start').text[:-3])
+            #timestart = timestartabs-timenow
+            #timeend = (int(l.find('end').text[:-3]))-timenow
+            #dt = datetime.datetime.fromtimestamp(timestartabs)
+            #duration = (timeend-timestart)//60
+            #if timestart + offset < 1:
+            #    timestart=0
+            #    if oddeven == "even":
+            #        oddevenresult = "evennow"
+            #    if oddeven == "odd":
+            #        oddevenresult = "oddnow"
+            #else:
+            oddevenresult=oddeven
+            
+            retval += ('<div class="epgcell %s" style="width:'%(oddevenresult))
+            
+            retval +='200'
+            
+            #retval += str(((timeend//scale)-(timestart//scale))-3)
+            #if l.find('recording_id') is not None:
+            #    retval += (';"><span class=epgtxt><a href="javascript:showinfodel(%s,%s)" width="320" height="320">'%(l.find('id').text,l.find('recording_id').text))
+            #else:
+            retval += (';"><span class=epgtxt><a href="javascript:showinfo(%s)" width="320" height="320">')#%(l.find('id').text))
+            
+            retval += l.find('Title').text
+            retval += str(timestartabs)
+            
+            #if l.find('recording_id') is not None:
+            #    record="<font style='color:#ff0000;'>[REC]</font>"
+            #else:
+            #    record=""
+            #minutes = dt.minute
+            #if minutes < 10:
+            #    minutes = ("0%s"%(minutes))
+            #retval += ('</a></span><br><span class=epgtxt>%s ab %s:%s (%s Min)</span></div>'% (record,dt.hour, minutes,str(duration)))
+            retval += ('</a></span><br><span class=epgtxt>ab  Min)</span></div>')
+    retval += "</div></td>"
+    return retval
+def PrintEPGMythTV(server):
+    dtwd = datetime.datetime.now() + datetime.timedelta(seconds=offset)
+    timenow=int(time.mktime(dtwd.timetuple()))
+    CList=GetChannelListMythTV(server)
+    PrintHead('html')
+    PrintHeader()
+    print('<section class="gesamt">')
+    print('<table>')
+    if(showtimeline=='1'):
+        print(PrintTimeLine(dtwd,'MTV'))
+    for i in range(1,len(CList)):
+        oddeven="odd"
+        if i%2 == 0:
+            oddeven="even"
+        print('<tr><th class="chanellogo">')
+        #if (str(CList[i][3])=="None"):
+        #    print(CList[i][0])
+        #else:
+        print('<img src="%s%s" style="height:30;width=30;" alt="%s">'% (server,CList[i][2],CList[i][0]))
+        print('</th>')
+        print(BuildEpgLineMythTV(server,CList[i][1],timenow,oddeven))
+        print('</tr>')
+    print('</table></section>')
+    if(shownowline=='1'):
+        print(PrintNowLine(CList))
+    PrintFooter()
 
+#Debug Infos
+def PrintDebugNPVR(server,pin):
+    PrintHead('html')
+    print("<html><head><style>td{font-family: Arial, Helvetica, sans-serif;}</style></head><body><table>")
+    print("<tr><td><b>environmentvariable</b></td><td><b>value</b></td></tr>")
+    print("<tr><td>server</td><td>"+server+"</td></tr>")
+    print("<tr><td>servertype</td><td>"+str(servertype)+"</td></tr>")
+    print("<tr><td>pin</td><td>"+pin+"</td></tr>")
+    print("<tr><td>scale</td><td>"+str(scale)+"</td></tr>")
+    print("<tr><td>shownowline</td><td>"+str(shownowline)+"</td></tr>")
+    print("<tr><td>showtimeline</td><td>"+str(showtimeline)+"</td></tr>")    
+    print("<tr><td>enabledebug</td><td>"+str(enabledebug)+"</td></tr>")
+    dtwd=datetime.datetime.now() + datetime.timedelta(seconds=0)
+    print("<tr><td><b>systemvariable</b></td><td><b>value</b></td></tr>")
+    print("<tr><td>Servertime</td><td>"+str(dtwd)+"</td></tr>")
+    print("<tr><td>secs to full hour</td><td>"+str(((60-int(dtwd.strftime("%M")))*60)-(int(dtwd.strftime("%S"))))+"</td></tr>")  
+    print("<tr><td><b>serverconnection</b></td><td><b>result</b></td></tr>")
+    sid = DoAuthNPVR(server,pin)
+    if(sid == '1'):
+        print("<tr><td>connection</td><td>failed</td></tr>")
+    else:
+        print("<tr><td>connection</td><td>successful</td></tr>")
+    if(sid == '0'):
+        print("<tr><td>login</td><td>failed</td></tr>")
+    else:
+        print("<tr><td>login</td><td>successful</td></tr>")
+    print("<tr><td>sessionId</td><td>"+sid+"</td></tr>")
+    CList = GetChannelListNPVR(server,sid)
+    print("<tr><td>channels</td><td>")
+    for i in range(1,len(CList)):
+        print(str(CList[i][0])+"; ")
+    print("</td></tr>")    
+    print("</table></body></html>")
+def PrintDebugTVH(server):
+    PrintHead('html')
+    print("<html><head><style>td{font-family: Arial, Helvetica, sans-serif;}</style></head><body><table>")
+    print("<tr><td><b>environmentvariable</b></td><td><b>value</b></td></tr>")
+    print("<tr><td>server</td><td>"+server+"</td></tr>")
+    print("<tr><td>servertype</td><td>"+str(servertype)+"</td></tr>")
+    print("<tr><td>scale</td><td>"+str(scale)+"</td></tr>")
+    print("<tr><td>shownowline</td><td>"+str(shownowline)+"</td></tr>")
+    print("<tr><td>showtimeline</td><td>"+str(showtimeline)+"</td></tr>")    
+    print("<tr><td>enabledebug</td><td>"+str(enabledebug)+"</td></tr>")
+    dtwd=datetime.datetime.now() + datetime.timedelta(seconds=0)
+    print("<tr><td><b>systemvariable</b></td><td><b>value</b></td></tr>")
+    print("<tr><td>Servertime</td><td>"+str(dtwd)+"</td></tr>")
+    print("<tr><td>secs to full hour</td><td>"+str(((60-int(dtwd.strftime("%M")))*60)-(int(dtwd.strftime("%S"))))+"</td></tr>")  
+    print("<tr><td><b>serverconnection</b></td><td><b>result</b></td></tr>")
+    try:
+        webUrl  = urllib.request.urlopen('%s/api/service/mapper/status'% (server))
+        status = json.loads(webUrl.read())
+    except Exception:
+        print("<tr><td>connection</td><td>failed</td></tr>")
+        print("</table></body></html>")
+        end()
+    print("<tr><td>connection</td><td>successful</td></tr>")
+    CList = GetChannelListTVH(server)
+    print("<tr><td>channels</td><td>")
+    for i in range(1,len(CList)):
+        print(str(CList[i][0])+"; ")
+    print("</td></tr>")    
+    print("</table></body></html>") 
+def PrintDebugMythTV(server):
+    PrintEPGMythTV(server)
+    #PrintHead('html')
+    #print("server "+server+"<br>")
+    #print("scale "+str(scale)+"<br>")
+    #print("servertype "+str(servertype)+"<br>")
+    #dtwd=datetime.datetime.now() + datetime.timedelta(seconds=0)
+    #print("Servertime"+str(dtwd)+"<br>")
+    #print("secstofullhour"+str(((60-int(dtwd.strftime("%M")))*60)-(int(dtwd.strftime("%S"))))+"<br>")  
+    #print(GetChannelListMythTV(server))
 #Main
 fs = cgi.FieldStorage()
 if "page" in fs:
     page = fs["page"].value
 else:
     page=""
-    
-if page == "epg":
-    PrintEPG()
-elif page == "epgcss":
-    PrintEPGCSS()
-elif page == "detailcss":
-    PrintDetailCSS()
-elif page == "epg_detail":
-    PrintEPGDetail()    
-elif page == "recordevent":
-    PrintRecordEvent()
-elif page == "recorddelete":
-    PrintRecordDelete()
-elif page == "debug":    
-    sid = DoAuth(pin)
-    PrintHTMLHead()
-else:
-    PrintEPG()
+
+if (stype == 0):
+    if page == "epg":
+        PrintEPGNPVR(server,pin)
+    elif page == "epgcss":
+        PrintEPGCSS()
+    elif page == "detailcss":
+        PrintDetailCSS()
+    elif page == "epg_detail":
+        PrintEPGDetailNPVR(server,pin) 
+    elif page == "recordevent":
+        PrintRecordEventNPVR(server,pin)
+    elif page == "recorddelete":
+        PrintRecordDeleteNPVR(server,pin)
+    elif page == "debug":    
+        if(enabledebug=='1'):
+            PrintDebugNPVR(server,pin)
+        else:
+            PrintEPGNPVR(server,pin)
+    else:
+        PrintEPGNPVR(server,pin)
+if (stype == 1):
+    if page == "epg":
+        PrintEPGTVH(server)
+    elif page == "epgcss":
+        PrintEPGCSS()
+    elif page == "detailcss":
+        PrintDetailCSS()
+    elif page == "epg_detail":
+        PrintEPGDetailTVH(server) 
+    elif page == "recordevent":
+        PrintRecordEventTVH(server)
+    elif page == "recorddelete":
+        PrintRecordDeleteTVH(server)
+    elif page == "debug":  
+        if(enabledebug=='1'):
+            PrintDebugTVH(server)
+        else:
+            PrintEPGTVH(server)
+    else:
+        PrintEPGTVH(server)
+if (stype == 2):
+    if page == "epg":
+        PrintEPGMythTV(server)
+    elif page == "epgcss":
+        PrintEPGCSS()
+    elif page == "detailcss":
+        PrintDetailCSS()
+    elif page == "epg_detail":
+        PrintEPGDetailMythTV(server) 
+    elif page == "recordevent":
+        PrintRecordEventMythTV(server)
+    elif page == "recorddelete":
+        PrintRecordDeleteMythTV(server)
+    elif page == "debug":  
+        if(enabledebug=='1'):
+            PrintDebugMythTV(server)
+        else:
+            PrintEPGMythTV(server)
+    else:
+        PrintEPGMythTV(server)
