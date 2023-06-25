@@ -41,26 +41,43 @@ enabledebug=0                    enable/disable debug output (optional)
 
 
 
+
 Parameters to start with TVHeadend
 
 server=http://1.1.1.1:9981       url TVHeadend
+
 scale=10                         timeresolution (optional)
+
 offset=900                       reverse view time (optional)
+
 shownowline=1                    enable/disable nowline (optional)
+
 showtimeline=1                   enable/disable timeline (optional)
+
 showflavor=1                     enable/disable display of servertype (optional)
+
 servertype=TVHeadend             servertype TVHeadend
+
 enabledebug=0                    enable/disable debug output (optional)
+
 
 
 Parameters to start with MythTV
 
 server=http://1.1.1.1:6654       url MythTV
+
 scale=10                         timeresolution (optional)
+
 offset=900                       reverse view time (optional)
+
 shownowline=1                    enable/disable nowline (optional)
+
 showtimeline=1                   enable/disable timeline (optional)
+
 showflavor=1                     enable/disable display of servertype (optional)
+
 servertype=MythTV                servertype MythTV
+
 enabledebug=0                    enable/disable debug output (optional)
+
 
