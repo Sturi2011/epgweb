@@ -21,7 +21,7 @@ docker run --name=epgweb -d -t -p 80:80 -e "pin=0000" -e "server=http://192.168.
 
 Parameters to start with NextPVR
 
-pin=0000                         pin for NextPVR 
+pin=0000                         pin for NextPVR
 server=http://1.1.1.1:8866       url NextPVR
 scale=10                         timeresolution (optional)
 offset=900                       reverse view time (optional)
