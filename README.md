@@ -1,7 +1,11 @@
 # nextpvrepg
-web epg container for nextpvr in docker container
+epg display container for NextPVR, TVHeadend and MythTV  in docker container
 
-Build with:
+dowload: 
+
+git clone 
+
+Build container with:
 
 docker build  -t afohl/nextpvrepg .
 
