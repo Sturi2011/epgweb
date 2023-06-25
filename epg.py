@@ -34,6 +34,7 @@ scale=int(config['EPG']['scale'])
 offset=int(config['EPG']['offset'])*-1
 shownowline=(config['EPG']['shownowline'])
 showtimeline=(config['EPG']['showtimeline'])
+showflavor=(config['EPG']['showflavor'])
 servertype=(config['EPG']['servertype'])
 enabledebug=(config['EPG']['enabledebug'])
 if servertype == 'NextPvr':     
@@ -103,7 +104,7 @@ def PrintHeader():
             var rbutton = document.getElementById("recordbutton");
             var cbutton = document.getElementById("closebutton");
             cbutton.innerHTML="<br><a href='javascript:hideinfo()'>Schlie&szlig;en</a>";
-            rbutton.innerHTML="<br><a href='javascript:recorddel(`"+channel+"`,`"+starttime+"`)'>Abbrechen</a>";
+            rbutton.innerHTML="<br><a href='javascript:recorddelmythtv(`"+channel+"`,`"+starttime+"`)'>Abbrechen</a>";
             rbutton.style.display="block";
             cbutton.style.display="block";
         }
@@ -117,7 +118,12 @@ def PrintHeader():
             var rbutton = document.getElementById("recordbutton")
             rbutton.style.display = "none";
         }
-        function recorddel(channel,starttime) {
+        function recorddel(elementId) {
+            document.getElementById("recorddetail").innerHTML="<object type='text/html' data='/cgi-bin/epg.py?page=recorddelete&eventId=" + elementId + "' width='100%'></object>"
+            var rbutton = document.getElementById("recordbutton")
+            rbutton.style.display = "none";
+        }
+        function recorddelmythtv(channel,starttime) {
             document.getElementById("recorddetail").innerHTML="<object type='text/html' data='/cgi-bin/epg.py?page=recorddelete&channel=" + channel + "&starttime=" + starttime + "' width='100%'></object>"
             var rbutton = document.getElementById("recordbutton")
             rbutton.style.display = "none";
@@ -155,14 +161,14 @@ def PrintEPGCSS():
   }
   
   .timecode{
-  font-size:10;
+  font-size:10px;
   color:#ffffff;
   font-family: "Helvetica Neue", "Helvetica", "Open Sans", "Arial", sans-serif;
   valign:top;
   }
   
   .timecodehour{
-  font-size:14;
+  font-size:14px;
   color:#ffffff;
   font-family: "Helvetica Neue", "Helvetica", "Open Sans", "Arial", sans-serif;
   font-wight:bold;
@@ -170,6 +176,19 @@ def PrintEPGCSS():
   
   .chanellogo {
   color: #ffffff;
+  overflow:hidden;
+  position: sticky;
+  width: 66px;
+  left: 0px;
+  top: auto;
+  background-color: #333333;
+  z-index: 100;
+  }
+
+  .pvrflavor {
+  font-size:10px;
+  color:#ffffff;
+  font-family: "Helvetica Neue", "Helvetica", "Open Sans", "Arial", sans-serif;
   overflow:hidden;
   position: sticky;
   width: 66px;
@@ -329,7 +348,10 @@ def PrintNowLine(CList):
     return('<div class="nowline" style="height:%spx;left:%spx;"></div>'% (heightpx,offsetpx))
 def PrintTimeLine(dtwd,servertype,scale):
     SecondsToFullHour=((60-int(dtwd.strftime("%M")))*60)+60-(int(dtwd.strftime("%S")))
-    TimeLineString = "<thead height='20px' style='position:sticky; top:0px; z-index:50;'><tr><th class='chanellogo'>"+servertype+"</th><td style='background-Color:#333333;'><div style='height:20px;display: inline-flex;'>"
+    TimeLineString = "<thead height='20px' style='position:sticky; top:0px; z-index:50;'><tr><th class='pvrflavor'>"
+    if (showflavor=='1'):
+        TimeLineString += servertype
+    TimeLineString += "</th><td style='background-Color:#333333;'><div style='height:20px;display: inline-flex;'>"
     if SecondsToFullHour > 2700:
         TimeLineString += ("<div style='width:%spx;' class=timeline20p></div>"%(((SecondsToFullHour-2700)//scale)-3))
         TimeLineString += ("<div class='timelinemarker10p'></div>")
@@ -465,7 +487,7 @@ def PrintEPGNPVR(server,pin,scale):
         print('<section class="gesamt">')
         print('<table>')
         if(showtimeline=='1'):
-            print(PrintTimeLine(dtwd,'NPVR',scale))
+            print(PrintTimeLine(dtwd,'NextPVR',scale))
         for i in range(1,len(CList)):
             oddeven="odd"
             if i%2 == 0:
@@ -590,7 +612,7 @@ def PrintEPGTVH(server,scale):
     print('<section class="gesamt">')
     print('<table>')
     if(showtimeline=='1'):
-        print(PrintTimeLine(dtwd,'TVH',scale))
+        print(PrintTimeLine(dtwd,'TVHeadend',scale))
     for i in range(1,len(CList)):
         oddeven="odd"
         if i%2 == 0:
@@ -741,16 +763,13 @@ def PrintEPGMythTV(server,scale,offset):
     print('<section class="gesamt">')
     print('<table>')
     if(showtimeline=='1'):
-        print(PrintTimeLine(dtwd,'MTV',scale))
+        print(PrintTimeLine(dtwd,'MythTV',scale))
     for i in range(1,len(CList)):
         oddeven="odd"
         if i%2 == 0:
             oddeven="even"
         print('<tr><th class="chanellogo">')
-        #if (str(CList[i][3])=="None"):
-        #    print(CList[i][0])
-        #else:
-        print('<img src="%s%s" style="height:30px;width=30px;" alt="%s">'% (server,CList[i][2],CList[i][0][:3]))
+        print('<img src="%s%s&Height=25&Width=40" alt="%s">'% (server,CList[i][3],CList[i][0][:3]))
         print('</th>')
         print(BuildEpgLineMythTV(server,CList[i][1],timenow,oddeven,videoserveroffsetseconds))
         print('</tr>')
