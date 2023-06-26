@@ -728,12 +728,10 @@ def BuildEpgLineMythTV(server,channel,timenow,oddeven,videoserveroffsetseconds):
             recording = l.find('Recording')
             channeldata = l.find('Channel')
             if (recording.find('Status').text=='WillRecord'):
-                #retval += recording.find('RecordId').text
-                #retval += ('%s/Guide/GetProgramList?StartTime=%s&EndTime=%s&ChanID=%s&details=false'% (server,isostarttimewithz,isoendtimewithz, channel))
                 retval += ('px;"><span class=epgtxt><a href="javascript:showinfodelmythtv(\'%s\',\'%s\')" width="320" height="320">'%(channel, l.find('StartTime').text))
                 record="<font style='color:#ff0000;'>[REC]</font>"
             else:
-                retval += ('px;"><span class=epgtxt><a href="javascript:showinfomythtv(\'%s\',\'%s\',\'%s\',\'%s\',\'%s\')" width="320" height="320">'% (channel, l.find('StartTime').text,l.find('EndTime').text,channeldata.find('CallSign').text,l.find('Title').text))
+                retval += ('px;"><span class=epgtxt><a href="javascript:showinfomythtv(\'%s\',\'%s\',\'%s\',\'%s\',\'%s\')" width="320" height="320">'% (channel, l.find('StartTime').text,l.find('EndTime').text,channeldata.find('CallSign').text,l.find('Title').text.replace("'","")))
                 record=""
             retval += l.find('Title').text
             minutes = timestartshow.minute
