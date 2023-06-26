@@ -283,8 +283,10 @@ def PrintEPGCSS():
   height: 779px;
   margin-left: 0px;
   padding: 0;
+  
   }
   
+ 
   .info {
   display: none;
   position: fixed;
@@ -676,7 +678,7 @@ def PrintRecordDeleteTVH(server):
         print("<html><head><link rel='stylesheet' href='/cgi-bin/epg.py?page=detailcss'></head><body><br><span class='EPGDetailTitle'>Fehlgeschlagen</span></body></html>")
 #MythTV Functions
 def GetChannelListMythTV(server):
-    webUrl  = urllib.request.urlopen('%s/Channel/GetChannelInfoList?SourceID=0&StartIndex=1&OnlyVisible=false&Details=true'% (server))
+    webUrl  = urllib.request.urlopen('%s/Channel/GetChannelInfoList?SourceID=0&StartIndex=0&OnlyVisible=false&Details=true'% (server))
     root = etree.fromstring(webUrl.read())
     channell = root.find('ChannelInfos')
     CList = [[]]
@@ -685,7 +687,7 @@ def GetChannelListMythTV(server):
         ChannelID = channel.find('ChanId').text
         ChannelNumber = channel.find('ChanNum').text
         ChannelIcon = channel.find('IconURL').text
-        CList.append([ChannelName,ChannelID,ChannelNumber,ChannelIcon])
+        CList.append([ChannelName,ChannelID,ChannelNumber,ChannelIcon])   
     return CList
 def BuildEpgLineMythTV(server,channel,timenow,oddeven,videoserveroffsetseconds):
     dtstart = datetime.datetime.now() - datetime.timedelta(seconds=videoserveroffsetseconds) + datetime.timedelta(seconds=offset) 
@@ -932,16 +934,37 @@ def PrintDebugTVH(server):
     print("</td></tr>")    
     print("</table></body></html>") 
 def PrintDebugMythTV(server):
-    #PrintEPGMythTV(server)
     PrintHead('html')
-    print("server "+server+"<br>")
-    print("scale "+str(scale)+"<br>")
-    print("servertype "+str(servertype)+"<br>")
+    print("<html><head><style>td{font-family: Arial, Helvetica, sans-serif;}</style></head><body><table>")
+    print("<tr><td><b>environmentvariable</b></td><td><b>value</b></td></tr>")
+    print("<tr><td>server</td><td>"+server+"</td></tr>")
+    print("<tr><td>servertype</td><td>"+str(servertype)+"</td></tr>")
+    print("<tr><td>scale</td><td>"+str(scale)+"</td></tr>")
+    print("<tr><td>shownowline</td><td>"+str(shownowline)+"</td></tr>")
+    print("<tr><td>showtimeline</td><td>"+str(showtimeline)+"</td></tr>")    
+    print("<tr><td>enabledebug</td><td>"+str(enabledebug)+"</td></tr>")
     dtwd=datetime.datetime.now() + datetime.timedelta(seconds=0)
-    print("Servertime"+str(dtwd)+"<br>")
-    print("secstofullhour"+str(((60-int(dtwd.strftime("%M")))*60)-(int(dtwd.strftime("%S"))))+"<br>")  
-
-    #print(GetChannelListMythTV(server))
+    print("<tr><td><b>systemvariable</b></td><td><b>value</b></td></tr>")
+    print("<tr><td>Servertime</td><td>"+str(dtwd)+"</td></tr>")
+    print("<tr><td>secs to full hour</td><td>"+str(((60-int(dtwd.strftime("%M")))*60)-(int(dtwd.strftime("%S"))))+"</td></tr>")  
+    print("<tr><td><b>serverconnection</b></td><td><b>result</b></td></tr>")
+    try:
+        webUrl  = urllib.request.urlopen('%s/Myth/GetTimeZone'% (server))
+        root = etree.fromstring(webUrl.read())
+    except Exception:
+        print("<tr><td>connection</td><td>failed</td></tr>")
+        print("</table></body></html>")
+        end()
+    else:
+        print("<tr><td>connection</td><td>succsessful</td></tr>")
+    videoserveroffsetseconds = int(root.find('UTCOffset').text)
+    print("<tr><td><b>Servertimeoffset</b></td><td><b>%s</b></td></tr>"%(videoserveroffsetseconds))
+    CList = GetChannelListMythTV(server)
+    print("<tr><td>channels</td><td>")
+    for i in range(1,len(CList)):
+        print(str(CList[i][0])+"; ")
+    print("</td></tr>")    
+    print("</table></body></html>") 
 
 #Main
 fs = cgi.FieldStorage()
