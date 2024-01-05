@@ -16,7 +16,7 @@ docker build  -t afohl/epgweb .
 
 Run excample:
 
-docker run --name=epgweb -d -t -p 80:80 -e "pin=0000" -e "server=http://192.168.0.1:8866" -e "servertype=NextPvr" -e "scale=10" --restart=always  afohl/epgweb
+docker run --name=epgweb -d -t -p 80:80 -e "pin=0000" -e "server=http://192.168.0.1:8866" -e "servertype=NextPvr" -e "scale=10"  -e "showtimeline=1" --restart=always  afohl/epgweb
 
 
 Parameters to start with NextPVR
