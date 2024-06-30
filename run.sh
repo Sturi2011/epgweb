@@ -32,7 +32,7 @@ else
 fi
 if [ -z "$showtimeline" ]
 then
-      echo "showtimeine=1" >> /var/www/cgi-bin/epg.conf
+      echo "showtimeline=1" >> /var/www/cgi-bin/epg.conf
 else
       echo "showtimeline=$showtimeline" >> /var/www/cgi-bin/epg.conf
 fi
